@@ -116,13 +116,13 @@ fn play(path: &str, total: Duration) -> Result<(), Box<dyn Error>>{
                             let volume = (sink.volume() + 0.05).min(1.0);
                             sink.set_volume(volume);
                         }
-                        KeyCode::Chat('-') =>{
+                        KeyCode::Char('-') =>{
                             let volume = (sink.volume() - 0.05).max(0.0);
                             sink.set_volume(volume);
                         }
                         KeyCode::Char('q') => break,
                         KeyCode::Esc => pending = Pending::Empty,
-                        KeyCode::Char('c') => {
+                        KeyCode::Char(c) => {
                             if let Some(action) = handle_char(&mut pending, c){
                                 match action{
                                     Action::SeekBy(seconds) => seek_by(&sink, seconds, total),
@@ -142,11 +142,12 @@ fn play(path: &str, total: Duration) -> Result<(), Box<dyn Error>>{
         let state = if sink.is_paused(){"paused "} else{"playing"};
         let volume = (sink.volume() * 100.0).round() as u32;
         print!(
-            "\r{}  {}/{}   volume{:>3}%  ",
+            "\r{}  {}/{}   volume{:>3}%   {:<8}",
             state,
             format_time(sink.get_pos()),
             format_time(total),
-            volume
+            volume,
+            pending.display()
         );
         io::stdout().flush()?;
     }
@@ -180,8 +181,8 @@ impl Unit{
 // what has been typed so far
 #[derive(Clone, Copy)]
 enum Pending{
-    Empty,                       // nothing typed
-    Count(64),                   // a number like '12'
+    Empty,                        // nothing typed
+    Count(u64),                   // a number like '12'
     WithUnit(Option<u64>, Unit), // maybe a number, then s or m, example: '12s' or '12m'
 }
 
@@ -206,8 +207,8 @@ enum Action{
 *  feeds one typed character into the parser
 *  returns an 'Action' when a command is complete
 */
-fn handle_char(pending: &num Pending, c: char) -> Option<Action>{
-    let(next, action) = match(*pending, c)
+fn handle_char(pending: &mut Pending, c: char) -> Option<Action>{
+    let(next, action) = match(*pending, c){
         // digits build up the count
         (Pending::Empty, '0'..='9') => {
             let digit = c.to_digit(10).unwrap() as u64;
@@ -228,19 +229,19 @@ fn handle_char(pending: &num Pending, c: char) -> Option<Action>{
         // h or l after a unit finishes the command
         (Pending::WithUnit(count, unit), 'h' | 'l') => {
             let seconds = count.unwrap_or(1) as i64 * unit.seconds();
-            let offset = if == 'h' (-seconds) else {seconds};
-            (Pending::Empty, Some(Action::Seekby(offset)))
+            let offset = if c == 'h' {-seconds} else {seconds};
+            (Pending::Empty, Some(Action::SeekBy(offset)))
         }
 
         // anything else cancels
-        _ => (Pending::Empty, None).
+        _ => (Pending::Empty, None),
     };
     *pending = next;
     action
 }
 
 // jumps forward or back, staying inside the song
-fn seek_by(sink: &sink, offset: i64, total: Duration){
+fn seek_by(sink: &Sink, offset: i64, total: Duration){
     let current = sink.get_pos().as_secs() as i64;
     let last = total.as_secs().saturating_sub(1) as i64;
     let target = (current + offset).clamp(0, last);
