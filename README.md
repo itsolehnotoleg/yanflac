@@ -9,6 +9,9 @@ shows tags, no GUI needed.
 
 - reads tags: artist, album, album artist, genre, title, track number, length
 - plays a single audio file
+- pause, volume and quit
+- vim-style seeking with counts (`30sl`, `2mh`)
+- live status line with position, volume and the command being typed
 
 ## controls
 
